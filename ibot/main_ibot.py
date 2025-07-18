@@ -611,6 +611,20 @@ class iBOTLoss(nn.Module):
         patch_center = patch_center / (len(teacher_patch) * dist.get_world_size())
         self.center2 = self.center2 * self.center_momentum2 + patch_center * (1 - self.center_momentum2)
 
+class MinMaxScaling:
+    def __init__(self, min_val=0.0, max_val=1.0):
+        self.min_val = min_val
+        self.max_val = max_val
+
+    def __call__(self, tensor):
+        min_tensor = tensor.min()
+        max_tensor = tensor.max()
+        if max_tensor == min_tensor:
+            return torch.zeros_like(tensor)
+        norm_tensor = (tensor - min_tensor) / (max_tensor - min_tensor)
+        norm_tensor = norm_tensor * (self.max_val - self.min_val) + self.min_val
+        return norm_tensor
+
 class DataAugmentationiBOT(object):
     def __init__(self, global_crops_scale, local_crops_scale, global_crops_number, local_crops_number):
         flip_and_color_jitter = T.Compose([
@@ -622,7 +636,8 @@ class DataAugmentationiBOT(object):
             # ),
             # T.RandomGrayscale(p=0.2),
         ])
-        normalize = T.Normalize(mean=[0.07126], std=[0.13697])
+        minmax_scaling = MinMaxScaling()
+        normalize = T.Normalize(mean=[0.18713481659148107], std=[0.17456506099388783])
         permute = Permute([1, 0, 2, 3])
         # normalize = T.Compose([
         #     T.ToTensor(),
@@ -633,6 +648,7 @@ class DataAugmentationiBOT(object):
         # transformation for the first global crop
         self.global_transfo1 = T.Compose([
             T.RandomResizedCrop(224, scale=global_crops_scale, interpolation=3),
+            minmax_scaling,
             flip_and_color_jitter,
             T.GaussianBlur(kernel_size=3, sigma=(0.1, 2.)),
             permute,
@@ -641,6 +657,7 @@ class DataAugmentationiBOT(object):
         # transformation for the rest of global crops
         self.global_transfo2 = T.Compose([
             T.RandomResizedCrop(224, scale=global_crops_scale, interpolation=3),
+            minmax_scaling,
             flip_and_color_jitter,
             T.RandomApply(
                 [T.GaussianBlur(kernel_size=3, sigma=(0.1, 2.))],
@@ -654,6 +671,7 @@ class DataAugmentationiBOT(object):
         self.local_crops_number = local_crops_number
         self.local_transfo = T.Compose([
             T.RandomResizedCrop(96, scale=local_crops_scale, interpolation=3),
+            minmax_scaling,
             flip_and_color_jitter,
             T.RandomApply(
                 [T.GaussianBlur(kernel_size=3, sigma=(0.1, 2.))],

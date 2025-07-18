@@ -11,6 +11,7 @@ from tqdm import tqdm
 import pandas as pd
 import matplotlib.pyplot as plt
 from torchvision.datasets import ImageFolder
+import h5py
 
 import os
 import PIL
@@ -318,11 +319,10 @@ class CTDataset3D(Dataset):
 
     def __getitem__(self, idx):
         img_path = os.path.join(self.image_folder, self.image_files[idx])
-        image = sitk.ReadImage(img_path)
-        image = sitk.GetArrayFromImage(image)
+        image = sitk.GetArrayFromImage(sitk.ReadImage(img_path))
         if self.batch_size:
             image = self.process_img(image)
-        image = torch.tensor(image).unsqueeze(0)
+        image = torch.tensor(image, dtype=torch.float32).unsqueeze(0)
         image = image.permute(1, 0, 2, 3)
         if self.transform:
             image = self.transform(image)
@@ -441,6 +441,31 @@ class CTFolderMask3D(CTDataset3D):
             masks.append(mask)
 
         return (output, masks)
+
+class CTDataset3Dh5(CTDataset3D):
+    def __init__(self, h5filePath, transform=None, batch_size=None):
+        self.h5filePath = h5filePath
+        self.h5file = None
+        self.transform = transform
+        self.batch_size = batch_size
+        with h5py.File(self.h5filePath, "r") as f:
+            self.image_files = list(f.keys())
+    
+    def __len__(self):
+        return len(self.image_files)
+    
+    def __getitem__(self, idx):
+        if self.h5file is None:
+            self.h5file = h5py.File(self.h5filePath, "r")
+        img_path = self.image_files[idx]
+        image = self.h5file[img_path][:]
+        if self.batch_size:
+            image = self.process_img(image)
+        image = torch.tensor(image, dtype=torch.float32).unsqueeze(0)
+        image = image.permute(1, 0, 2, 3)
+        if self.transform:
+            image = self.transform(image)
+        return image
 
 class ImageFolderInstance(ImageFolder):
     def __getitem__(self, index):
