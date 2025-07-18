@@ -26,7 +26,7 @@ from torchvision.ops.misc import Permute
 from torchvision import models as torchvision_models
 from tensorboardX import SummaryWriter
 from models.head import iBOTHead
-from loader import CTFolderMask, CTFolderMask3D, HistoricalDocFolderMask
+from loader import CTFolderMask, CTFolderMask3D
 from models.swin3D import swin_3D
 from models.vit_lora import vit_lora
 
@@ -179,16 +179,6 @@ def train_ibot(args):
             pred_shape=args.pred_shape,
             pred_start_epoch=args.pred_start_epoch,
             batch_size=224)
-    elif args.data_path.endswith(".pkl"):
-        dataset = HistoricalDocFolderMask(
-            pkl_path=args.data_path,
-            transform=transform,
-            patch_size=pred_size,
-            pred_ratio=args.pred_ratio,
-            pred_ratio_var=args.pred_ratio_var,
-            pred_aspect_ratio=(0.3, 1/0.3),
-            pred_shape=args.pred_shape,
-            pred_start_epoch=args.pred_start_epoch)
     else:
         dataset = CTFolderMask(
             args.data_path, 
