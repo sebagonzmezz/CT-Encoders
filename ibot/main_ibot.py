@@ -360,7 +360,7 @@ def train_ibot(args):
     to_restore = {"epoch": 0}
     if args.load_from:
         utils.restart_from_checkpoint(
-            os.path.join(args.output_dir, args.load_from),
+            args.load_from,
             run_variables=to_restore,
             student=student,
             teacher=teacher,
