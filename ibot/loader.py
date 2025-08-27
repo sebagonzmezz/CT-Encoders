@@ -211,6 +211,75 @@ class CTFolderMask3D(CTDataset3D):
         masks = []
         for img in output:
             try:
+                D, H, W = img.shape[-3] // self.psz, img.shape[-2] // self.psz, img.shape[-1] // self.psz
+            except:
+                # skip non-image
+                continue
+
+            high = self.get_pred_ratio() * D * H * W
+
+            if self.pred_shape == 'block':
+                # following BEiT (https://arxiv.org/abs/2106.08254), see at
+                # https://github.com/microsoft/unilm/blob/b94ec76c36f02fb2b0bf0dcb0b8554a2185173cd/beit/masking_generator.py#L55
+                mask = np.zeros((D, H, W), dtype=bool)
+                mask_count = 0
+                while mask_count < high:
+                    max_mask_patches = high - mask_count
+
+                    delta = 0
+                    for attempt in range(10):
+                        low = (min(D, H, W) // 3) ** 3 
+                        target_volume = random.uniform(low, max_mask_patches)
+                        aspect_ratio_1 = math.exp(random.uniform(*self.log_aspect_ratio))
+                        aspect_ratio_2 = math.exp(random.uniform(*self.log_aspect_ratio))
+                        h = int(round((target_volume * aspect_ratio_2 / aspect_ratio_1) ** (1/3)))
+                        d = int(round(h * aspect_ratio_1))
+                        w = int(round(h / aspect_ratio_2))
+                        if d < D and h < H and w < W and d > 0 and h > 0 and w > 0:
+                            front = random.randint(0, D - d)
+                            top = random.randint(0, H - h)
+                            left = random.randint(0, W - w)
+                            
+                            num_masked = mask[front:front + d, top:top + h, left:left + w].sum()
+                            if 0 < d * h * w - num_masked <= max_mask_patches:
+                                for i in range(front, front + d):
+                                    for j in range(top, top + h):
+                                        for k in range(left, left + w):
+                                            if mask[i, j, k] == 0:
+                                                mask[i, j, k] = 1
+                                                delta += 1
+
+                        if delta > 0:
+                            break
+
+                    if delta == 0:
+                        break
+                    else:
+                        mask_count += delta
+
+            elif self.pred_shape == 'rand':
+                total_elements = H * W * D
+                mask = np.hstack([
+                    np.zeros(total_elements - int(high)),
+                    np.ones(int(high)),
+                ]).astype(bool)
+                np.random.shuffle(mask)
+                mask = mask.reshape(H, W, D)
+            else:
+                # no implementation
+                assert False
+
+            masks.append(mask)
+
+        return (output, masks)
+
+class CTFolderMaskSliceWise(CTFolderMask3D):
+    def __getitem__(self, index):
+        output = super(CTFolderMask3D, self).__getitem__(index)
+
+        masks = []
+        for img in output:
+            try:
                 D, H, W = math.ceil(img.shape[-3] / self.psz), img.shape[-2] // self.psz, img.shape[-1] // self.psz
             except:
                 # skip non-image
