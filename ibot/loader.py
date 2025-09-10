@@ -264,7 +264,7 @@ class CTFolderMask3D(CTDataset3D):
                     np.ones(int(high)),
                 ]).astype(bool)
                 np.random.shuffle(mask)
-                mask = mask.reshape(H, W, D)
+                mask = mask.reshape(D, H, W)
             else:
                 # no implementation
                 assert False
