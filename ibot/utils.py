@@ -178,7 +178,7 @@ def restart_from_checkpoint(ckp_path, run_variables=None, **kwargs):
     Re-start from checkpoint
     """
     if not os.path.isfile(ckp_path):
-        return
+        raise FileNotFoundError(f"Checkpoint file {ckp_path} doesn't exist.")
     print("Found checkpoint at {}".format(ckp_path))
 
     # open checkpoint file
