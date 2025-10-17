@@ -147,27 +147,10 @@ class CTDataset3D(Dataset):
     def __getitem__(self, idx):
         img_path = os.path.join(self.image_folder, self.image_files[idx])
         image = sitk.GetArrayFromImage(sitk.ReadImage(img_path))
-        if self.batch_size:
-            image = self.process_img(image)
         image = torch.tensor(image, dtype=torch.float32).unsqueeze(0)
-        image = image.permute(1, 0, 2, 3)
         if self.transform:
             image = self.transform(image)
         return image
-
-    def process_img(self, img):
-        D, _, _ = img.shape
-        while D != self.batch_size:
-            if D < self.batch_size:
-                padding_needed = self.batch_size - D
-                img = np.pad(img, ((0, padding_needed), (0, 0), (0, 0)), mode='constant')
-            elif D > 250 and self.batch_size < 125:
-                img = img[::2, :, :]
-            else:
-                crop_size = (D - self.batch_size) // 2
-                img = img[crop_size:-crop_size, :, :]
-            D, _, _ = img.shape
-        return img
 
 class CTFolderMask3D(CTDataset3D):
     def __init__(self, *args, patch_size, pred_ratio, pred_ratio_var, pred_aspect_ratio,

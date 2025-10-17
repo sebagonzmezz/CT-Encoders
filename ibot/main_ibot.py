@@ -30,6 +30,8 @@ from loader import CTFolderMask, CTFolderMask3D
 from models.swin3D import swin_3D
 from models.vit_lora import vit_lora
 
+from transforms import DataAugmentationCTiBOT2
+
 def get_args_parser():
     parser = argparse.ArgumentParser('iBOT', add_help=False)
 
@@ -161,7 +163,7 @@ def train_ibot(args):
     cudnn.benchmark = True
 
     # ============ preparing data ... ============
-    transform = DataAugmentationiBOT(
+    transform = DataAugmentationCTiBOT2(
         args.global_crops_scale,
         args.local_crops_scale,
         args.global_crops_number,
