@@ -847,6 +847,7 @@ def swin_3D(window_size=(7, 7, 7), **kwargs):
             drop_path_rate=0.0,
             norm_layer=torch.nn.LayerNorm,
             spatial_dims=3,
+            downsample="mergingv2",
             **kwargs
         )
     return model
