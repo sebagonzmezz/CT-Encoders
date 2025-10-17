@@ -4,3 +4,4 @@ SimpleITK==2.4.1
 h5py==3.14.0
 monai==1.4.0
 einops==0.8.0
+batchgeneratorsv2>=0.3.0
