@@ -81,6 +81,8 @@ def get_args_parser():
         loss over [CLS] tokens (Default: 1.0)""")
     parser.add_argument('--lambda2', default=1.0, type=float, help="""loss weight for beit 
         loss over masked patch tokens (Default: 1.0)""")
+    parser.add_argument('--compute_cls_loss_prob', default=1.0, type=float, help="""Probability with which CLS loss 
+        is computed during training after warm up epochs (Default: 1.0)""")
         
     # Temperature teacher parameters
     parser.add_argument('--warmup_teacher_temp', default=0.04, type=float,
@@ -321,6 +323,7 @@ def train_ibot(args):
         lambda1=args.lambda1,
         lambda2=args.lambda2,
         mim_start_epoch=args.pred_start_epoch,
+        compute_cls_loss_prob=args.compute_cls_loss_prob,
     ).cuda()
 
     if utils.is_main_process(): # Tensorboard configuration
@@ -512,7 +515,7 @@ class iBOTLoss(nn.Module):
                  teacher_temp, warmup_teacher_temp2, teacher_temp2, 
                  warmup_teacher_temp_epochs, nepochs, student_temp=0.1, 
                  center_momentum=0.9, center_momentum2=0.9,
-                 lambda1=1.0, lambda2=1.0, mim_start_epoch=0):
+                 lambda1=1.0, lambda2=1.0, mim_start_epoch=0, compute_cls_loss_prob=1.0):
         super().__init__()
         self.student_temp = student_temp
         self.center_momentum = center_momentum
@@ -524,6 +527,9 @@ class iBOTLoss(nn.Module):
         self.register_buffer("center2", torch.zeros(1, 1, patch_out_dim))
         self.lambda1 = lambda1
         self.lambda2 = lambda2
+        self.mim_start_epoch = mim_start_epoch
+        self.warmup_teacher_temp_epochs = warmup_teacher_temp_epochs
+        self.compute_cls_loss_prob = compute_cls_loss_prob
 
         # we apply a warm up for the teacher temperature because
         # a too high temperature makes the training instable at the beginning
@@ -550,53 +556,61 @@ class iBOTLoss(nn.Module):
         student_cls, student_patch = student_output
         teacher_cls, teacher_patch = teacher_output
         
-        if student_local_cls is not None:
+        compute_cls_loss = epoch < (self.mim_start_epoch + self.warmup_teacher_temp_epochs) \
+            or np.random.rand() < self.compute_cls_loss_prob
+        if student_local_cls is not None and compute_cls_loss:
             student_cls = torch.cat([student_cls, student_local_cls])
 
         # [CLS] and patch for global patches
-        student_cls = student_cls / self.student_temp
-        student_cls_c = student_cls.chunk(self.ncrops)
+        if compute_cls_loss:
+            student_cls = student_cls / self.student_temp
+            student_cls_c = student_cls.chunk(self.ncrops)
         student_patch = student_patch / self.student_temp
         student_patch_c = student_patch.chunk(self.ngcrops)
         
         # teacher centering and sharpening
         temp = self.teacher_temp_schedule[epoch]
         temp2 = self.teacher_temp2_schedule[epoch]
-        teacher_cls_c = F.softmax((teacher_cls - self.center) / temp, dim=-1)
-        teacher_cls_c = teacher_cls_c.detach().chunk(self.ngcrops)
+        if compute_cls_loss:
+            teacher_cls_c = F.softmax((teacher_cls - self.center) / temp, dim=-1)
+            teacher_cls_c = teacher_cls_c.detach().chunk(self.ngcrops)
         teacher_patch_c = F.softmax((teacher_patch - self.center2) / temp2, dim=-1)
         teacher_patch_c = teacher_patch_c.detach().chunk(self.ngcrops)
 
         total_loss1, n_loss_terms1 = 0, 0
         total_loss2, n_loss_terms2 = 0, 0
-        for q in range(len(teacher_cls_c)):
-            for v in range(len(student_cls_c)):
+        for q in range(len(teacher_patch_c)):
+            for v in range(len(student_patch_c)):
                 if v == q:
                     loss2 = torch.sum(-teacher_patch_c[q] * F.log_softmax(student_patch_c[v], dim=-1), dim=-1)
                     mask = student_mask[v].flatten(1)
                     loss2 = torch.sum(loss2 * mask.float(), dim=-1) / mask.sum(dim=-1).clamp(min=1.0)
                     total_loss2 += loss2.mean()
                     n_loss_terms2 += 1
-                else:
+                elif compute_cls_loss:
                     loss1 = torch.sum(-teacher_cls_c[q] * F.log_softmax(student_cls_c[v], dim=-1), dim=-1)
                     total_loss1 += loss1.mean()
                     n_loss_terms1 += 1
             
-        total_loss1 = total_loss1 / n_loss_terms1 * self.lambda1
+        if compute_cls_loss and n_loss_terms1 > 0:
+            total_loss1 = total_loss1 / n_loss_terms1 * self.lambda1
+        else:
+            total_loss1 = torch.tensor(0.0, device=student_patch.device)
         total_loss2 = total_loss2 / n_loss_terms2 * self.lambda2
         total_loss = dict(cls=total_loss1, patch=total_loss2, loss=total_loss1 + total_loss2)
-        self.update_center(teacher_cls, teacher_patch)                  
+        self.update_center(teacher_cls, teacher_patch, compute_cls_loss)                  
         return total_loss
 
     @torch.no_grad()
-    def update_center(self, teacher_cls, teacher_patch):
+    def update_center(self, teacher_cls, teacher_patch, compute_cls_loss=True):
         """
         Update center used for teacher output.
         """
-        cls_center = torch.sum(teacher_cls, dim=0, keepdim=True)
-        dist.all_reduce(cls_center)
-        cls_center = cls_center / (len(teacher_cls) * dist.get_world_size())
-        self.center = self.center * self.center_momentum + cls_center * (1 - self.center_momentum)
+        if compute_cls_loss:
+            cls_center = torch.sum(teacher_cls, dim=0, keepdim=True)
+            dist.all_reduce(cls_center)
+            cls_center = cls_center / (len(teacher_cls) * dist.get_world_size())
+            self.center = self.center * self.center_momentum + cls_center * (1 - self.center_momentum)
 
         patch_center = torch.sum(teacher_patch.mean(1), dim=0, keepdim=True)
         dist.all_reduce(patch_center)
