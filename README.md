@@ -4,20 +4,12 @@ This repository contains the code used and modified from the [MAE](https://githu
 
 ## Installation
 
-1. Create a virtual environment: 
-   ```bash
-   conda create -n ctencoders python=3.10 -y
-   ```
-   and activate it: 
-   ```bash
-   conda activate ctencoders
-   ```
-2. Install [PyTorch 2.5](https://pytorch.org/get-started/locally/)
-3. Clone the repository:
+1. Create a virtual environment
+2. Clone the repository:
    ```bash
    git clone <repo-url>
    ```
-4. Install the required dependencies:
+3. Install the required dependencies:
    ```bash
    pip install -r requirements.txt
    ```
@@ -40,6 +32,7 @@ python3 main_ibot.py \
   --epochs 200 \
   --batch_size_per_gpu 6 \
   --data_path /.../your_dataset \
+  --compute_cls_loss_prob 0.3 \
   --arch swin3D \
   --patch_size 4 \
   --window_size 7 \
@@ -58,6 +51,7 @@ python3 main_ibot.py \
   --saveckp_freq 40 \
   --output_dir /.../output_dir
    ```
+The `compute_cls_loss_prob` parameter controls the probability with which the CLS Loss is computed. Vanilla iBOT would use `compute_cls_loss_prob=1`.
 
 ### MAE Training
 
