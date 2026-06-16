@@ -36,26 +36,27 @@ python ibot/main_ibot.py --data_path /../your_dataset --output_dir ./output_dir
    ```
 To start the iBOT pre-training with Swin3D, simply run the following command:
 ```bash
-python ibot/main_ibot.py \
---arch swin3D \
---batch_size_per_gpu 2 \
---epochs 400 \
---data_path /../your_dataset \
---saveckp_freq 40 \
---clip_grad 3.0 \
---global_crops_scale 0.4 1.0 \
---local_crops_scale 0.05 0.4 \
---lr 0.0005 \
---min_lr 1e-06 \
---norm_last_layer False \
---patch_size 4 \
---pred_ratio 0.0 0.3 \
---pred_ratio_var 0.0 0.2 \
---pred_shape block \
---pred_start_epoch 50 \
---warmup_teacher_temp_epochs 30 \
---window_size 7 \
---output_dir ./output_dir
+python3 main_ibot.py \
+  --epochs 200 \
+  --batch_size_per_gpu 6 \
+  --data_path /.../your_dataset \
+  --arch swin3D \
+  --patch_size 4 \
+  --window_size 7 \
+  --lr 0.0005 \
+  --min_lr 1e-06 \
+  --norm_last_layer False \
+  --global_crops_scale 0.4 1.0 \
+  --local_crops_scale 0.05 0.4 \
+  --local_crops_number 0 \
+  --clip_grad 3.0 \
+  --pred_ratio 0.0 0.3 \
+  --pred_ratio_var 0.0 0.2 \
+  --pred_shape rand \
+  --pred_start_epoch 50 \
+  --warmup_teacher_temp_epochs 30 \
+  --saveckp_freq 40 \
+  --output_dir /.../output_dir
    ```
 
 ### MAE Training
